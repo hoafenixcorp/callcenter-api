@@ -3,8 +3,7 @@ import uuid
 import json
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
-from datetime import datetime
-from fuzzywuzzy import fuzz
+from datetime import datetime, timedelta  # Import timedelta
 
 app = FastAPI()
 
@@ -194,6 +193,11 @@ async def book_tickets(request: Request):
     else:
         all_bookings_successful = True
         booking_summary_messages = []
+        total_ticket_quantity_sum = 0
+
+        current_booking_time = datetime.now()
+        due_date = current_booking_time + timedelta(days=5)
+        due_date_formatted = due_date.strftime('%d/%m/%Y')
 
         for i in range(len(ticket_type)):
             current_ticket_type = ticket_type[i]
@@ -217,15 +221,19 @@ async def book_tickets(request: Request):
                     "event_date": target_event['date'],
                     "ticket_type": current_ticket_type,
                     "ticket_quantity": current_ticket_quantity,
-                    "booking_date": datetime.now().isoformat(),
+                    "booking_date": current_booking_time.isoformat(),
                     "note": ""
                 }
                 fake_bookings.append(booking_details)
                 booking_summary_messages.append(f"{current_ticket_quantity} vé loại {current_ticket_type}")
+                total_ticket_quantity_sum += current_ticket_quantity
 
         if all_bookings_successful:
             status_code = "success"
-            response_text = f"Hệ thống đã thành công đặt {', '.join(booking_summary_messages)} cho sự kiện '{target_event['name']}' vào ngày {target_event['date']} cho hội viên {member_id}. Tổng cộng {sum(ticket_quantity)} vé. Vui lòng chuyển khoản trước ngày..."
+            response_text = (
+                f"Hệ thống đã thành công đặt {', '.join(booking_summary_messages)} cho sự kiện '{target_event['name']}' "
+                f"vào ngày {target_event['date']} cho hội viên {member_id}. Tổng cộng {total_ticket_quantity_sum} vé. "
+                f"Vui lòng chuyển khoản trước ngày {due_date_formatted}. Sau cuộc gọi này hệ thống sẽ gửi SMS thông tin thanh toán.")
         else:
             status_code = "fail"
             response_text = f"Có lỗi trong quá trình đặt vé: {'; '.join(booking_summary_messages)}. Vui lòng kiểm tra lại."
