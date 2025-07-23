@@ -70,7 +70,11 @@ async def validate_event_and_get_ticket_types(request: Request):
     parameters = request_data.get('sessionInfo', {}).get('parameters', {})
 
     event_name = parameters.get('event_name')
-    event_date_str = parameters.get('event_date')  # Changed from 'date' as per CX input
+    event_date_str = parameters.get('event_date')
+
+    print(f"Received request for /validate_event_and_get_ticket_types:")
+    print(f"  event_name from CX: '{event_name}'")
+    print(f"  event_date_str from CX: '{event_date_str}'")
 
     response_text = ""
     status_code = "fail"
@@ -80,22 +84,18 @@ async def validate_event_and_get_ticket_types(request: Request):
 
     found_event = None
     for event in FAKE_EVENTS:
-        if event_name and event_name.lower() in event['name'].lower():
+        if event_name and event_name.lower() == event['name'].lower():
             if event_date_str:
                 try:
-                    # CX sends date in ISO format (e.g., "2025-08-15T12:00:00+07:00")
                     dialogflow_date_obj = datetime.strptime(event_date_str, '%Y-%m-%dT%H:%M:%S%z')
                     event_date_formatted = dialogflow_date_obj.strftime('%Y-%m-%d')
 
-                    # Assume year 2025 for fake events, format as 'YYYY-MM-DD'
-                    # event['date'] is already 'YYYY-MM-DD' in FAKE_EVENTS
-
-                    if event_date_formatted == f"2025-{str(event['month']).zfill(2)}-{str(event['date']).split('-')[2].zfill(2)}":
+                    if event_date_formatted == event['date']:
                         found_event = event
                         break
                 except ValueError:
                     pass
-            else:  # If only event name provided
+            else:
                 found_event = event
                 break
 
