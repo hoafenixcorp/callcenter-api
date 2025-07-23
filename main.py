@@ -4,6 +4,7 @@ import json
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 from datetime import datetime
+from fuzzywuzzy import fuzz
 
 app = FastAPI()
 
@@ -15,7 +16,9 @@ FAKE_EVENTS = [
     {"name": "Hội Chợ Sách ABC", "date": "2025-09-20", "month": "9", "event_code": "HCS002", "available": True,
      "ticket_types": ["General", "Premium"]},
     {"name": "Workshop Nghệ Thuật", "date": "2025-10-01", "month": "10", "event_code": "WNA003", "available": False,
-     "ticket_types": []}
+     "ticket_types": []},
+    {"name": "Black pink day 2025", "date": "2025-10-01", "month": "10", "event_code": "BPK001", "available": True,
+     "ticket_types": ["Platinum", "Gold"]}
 ]
 
 fake_bookings = []
@@ -54,14 +57,18 @@ async def verify_member_code(request: Request):
 
     response_text = ""
     status_code = "fail"
+
+    custom_params = {}
+
     if member_id in VALID_MEMBER_CODES:
         response_text = f"Xác thực mã thành viên {member_id} thành công. Vui lòng lựa chọn: 1. Đặt vé, hoặc 2. Yêu cầu khác."
         status_code = "success"
+        custom_params["verified_member_code"] = member_id
     else:
         response_text = f"Mã thành viên {member_id} không hợp lệ. Vui lòng kiểm tra lại."
         status_code = "fail"
 
-    return build_cx_webhook_response(response_text, business_status=status_code)
+    return build_cx_webhook_response(response_text, business_status=status_code, custom_params=custom_params)
 
 
 @app.post("/validate_event_and_get_ticket_types")
@@ -69,12 +76,12 @@ async def validate_event_and_get_ticket_types(request: Request):
     request_data = await request.json()
     parameters = request_data.get('sessionInfo', {}).get('parameters', {})
 
-    event_name = parameters.get('event_name')
-    event_date_str = parameters.get('event_date')
+    event_name_from_cx = parameters.get('event_name')
+    event_date_str_from_cx = parameters.get('event_date')
 
     print(f"Received request for /validate_event_and_get_ticket_types:")
-    print(f"  event_name from CX: '{event_name}'")
-    print(f"  event_date_str from CX: '{event_date_str}'")
+    print(f"  event_name from CX: '{event_name_from_cx}'")
+    print(f"  event_date_str from CX: '{event_date_str_from_cx}'")
 
     response_text = ""
     status_code = "fail"
@@ -84,20 +91,32 @@ async def validate_event_and_get_ticket_types(request: Request):
 
     found_event = None
 
+    if not event_name_from_cx:
+        response_text = "Vui lòng cung cấp tên sự kiện bạn muốn tìm."
+        status_code = "fail"
+        return build_cx_webhook_response(response_text, business_status=status_code)
+
+    best_match_event = None
+    best_match_score = 0
+    NAME_MATCH_THRESHOLD = 75
+
     for event in FAKE_EVENTS:
-        name_matches = (event_name and event_name.lower() == event['name'].lower())
+        current_score = fuzz.ratio(event_name_from_cx.lower(), event['name'].lower())
 
         print(
-            f"  Comparing input name='{event_name.lower()}' with FAKE_EVENT_name='{event['name'].lower()}' (Match: {name_matches})")
+            f"  Comparing input name='{event_name_from_cx.lower()}' with FAKE_EVENT_name='{event['name'].lower()}' (Score: {current_score})")
 
-        if name_matches:
-            if event_date_str:
-                print(f"  Comparing input date='{event_date_str}' with FAKE_EVENT_date='{event['date']}'")
-                if event_date_str == event['date']:
-                    found_event = event
-                    break
+        if current_score >= NAME_MATCH_THRESHOLD:
+            if event_date_str_from_cx:
+                print(f"  Comparing input date='{event_date_str_from_cx}' with FAKE_EVENT_date='{event['date']}'")
+                if event_date_str_from_cx == event['date']:
+                    if current_score > best_match_score:
+                        best_match_event = event
+                        best_match_score = current_score
             else:
                 pass
+
+    found_event = best_match_event
 
     if found_event:
         if found_event['available']:
