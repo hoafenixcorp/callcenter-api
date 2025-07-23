@@ -84,15 +84,6 @@ async def validate_event_and_get_ticket_types(request: Request):
 
     found_event = None
 
-    parsed_event_date = None
-    if event_date_str:
-        try:
-            dialogflow_date_obj = datetime.strptime(event_date_str, '%Y-%m-%dT%H:%M:%S%z')
-            parsed_event_date = dialogflow_date_obj.strftime('%Y-%m-%d')
-        except ValueError:
-            print(f"  Warning: Could not parse event_date_str: {event_date_str}")
-            pass
-
     for event in FAKE_EVENTS:
         name_matches = (event_name and event_name.lower() == event['name'].lower())
 
@@ -100,13 +91,12 @@ async def validate_event_and_get_ticket_types(request: Request):
             f"  Comparing input name='{event_name.lower()}' with FAKE_EVENT_name='{event['name'].lower()}' (Match: {name_matches})")
 
         if name_matches:
-            if parsed_event_date:
-                print(f"  Comparing input date='{parsed_event_date}' with FAKE_EVENT_date='{event['date']}'")
-                if parsed_event_date == event['date']:
+            if event_date_str:
+                print(f"  Comparing input date='{event_date_str}' with FAKE_EVENT_date='{event['date']}'")
+                if event_date_str == event['date']:
                     found_event = event
                     break
             else:
-
                 pass
 
     if found_event:
