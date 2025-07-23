@@ -149,25 +149,19 @@ async def book_tickets(request: Request):
     parameters = request_data.get('sessionInfo', {}).get('parameters', {})
 
     member_id = str(parameters.get('verified_member_code', '')).lower()
-    event_name = parameters.get('event_name_from_backend')
     event_code = parameters.get('event_code')
-    event_date_str = parameters.get('event_date_from_backend')
-
-    ticket_types = parameters.get('ticket_type', [])
-    ticket_quantities = parameters.get('ticket_quantity', [])
+    ticket_type = parameters.get('ticket_type', [])
+    ticket_quantity = parameters.get('ticket_quantity', [])
 
     response_text = ""
     status_code = "fail"
 
     target_event = None
-    for event in FAKE_EVENTS:
-        if event_code and event['event_code'] == event_code:
-            target_event = event
-            break
-        elif event_name and event_name.lower() == event['name'].lower() and \
-                event_date_str and event_date_str == event['date']:
-            target_event = event
-            break
+    if event_code:
+        for event in FAKE_EVENTS:
+            if event['event_code'] == event_code:
+                target_event = event
+                break
 
     if not target_event:
         response_text = "Không tìm thấy sự kiện để đặt vé. Vui lòng xác minh lại thông tin sự kiện."
@@ -175,15 +169,15 @@ async def book_tickets(request: Request):
         response_text = f"Sự kiện '{target_event['name']}' đã hết vé. Không thể đặt được."
     elif not member_id or member_id not in VALID_MEMBER_CODES:
         response_text = f"Mã thành viên {member_id if member_id else 'không có'} không hợp lệ hoặc chưa được xác minh. Vui lòng cung cấp mã thành viên hợp lệ."
-    elif not ticket_types or not ticket_quantities or len(ticket_types) != len(ticket_quantities):
+    elif not ticket_type or not ticket_quantity or len(ticket_type) != len(ticket_quantity):  # Đã sửa
         response_text = "Thông tin loại vé hoặc số lượng không hợp lệ. Vui lòng cung cấp loại vé và số lượng bạn muốn đặt."
     else:
         all_bookings_successful = True
         booking_summary_messages = []
 
-        for i in range(len(ticket_types)):
-            current_ticket_type = ticket_types[i]
-            current_ticket_quantity = int(ticket_quantities[i])
+        for i in range(len(ticket_type)):
+            current_ticket_type = ticket_type[i]
+            current_ticket_quantity = int(ticket_quantity[i])
 
             if current_ticket_type not in target_event.get('ticket_types', []):
                 booking_summary_messages.append(
@@ -209,7 +203,7 @@ async def book_tickets(request: Request):
 
         if all_bookings_successful:
             status_code = "success"
-            response_text = f"Hệ thống đã thành công đặt {', '.join(booking_summary_messages)} cho sự kiện '{target_event['name']}' vào ngày {target_event['date']} cho hội viên {member_id}. Tổng cộng {sum(ticket_quantities)} vé. Vui lòng chuyển khoản trước ngày..."
+            response_text = f"Hệ thống đã thành công đặt {', '.join(booking_summary_messages)} cho sự kiện '{target_event['name']}' vào ngày {target_event['date']} cho hội viên {member_id}. Tổng cộng {sum(ticket_quantity)} vé. Vui lòng chuyển khoản trước ngày..."
         else:
             status_code = "fail"
             response_text = f"Có lỗi trong quá trình đặt vé: {'; '.join(booking_summary_messages)}. Vui lòng kiểm tra lại."
