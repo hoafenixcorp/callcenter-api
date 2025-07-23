@@ -148,10 +148,24 @@ async def book_tickets(request: Request):
     request_data = await request.json()
     parameters = request_data.get('sessionInfo', {}).get('parameters', {})
 
+    print(f"Received request for /book_tickets:")
+    print(f"  All parameters received: {parameters}")
+
     member_id = str(parameters.get('verified_member_code', '')).lower()
     event_code = parameters.get('event_code')
-    ticket_type = parameters.get('ticket_type', [])
-    ticket_quantity = parameters.get('ticket_quantity', [])
+
+    ticket_type_raw = parameters.get('ticket_type')
+    ticket_quantity_raw = parameters.get('ticket_quantity')
+
+    ticket_type = [ticket_type_raw] if ticket_type_raw is not None and not isinstance(ticket_type_raw,
+                                                                                      list) else ticket_type_raw if ticket_type_raw is not None else []
+    ticket_quantity = [ticket_quantity_raw] if ticket_quantity_raw is not None and not isinstance(ticket_quantity_raw,
+                                                                                                  list) else ticket_quantity_raw if ticket_quantity_raw is not None else []
+
+    print(f"  Extracted member_id: '{member_id}'")
+    print(f"  Extracted event_code: '{event_code}'")
+    print(f"  Processed ticket_type: {ticket_type}")
+    print(f"  Processed ticket_quantity: {ticket_quantity}")
 
     response_text = ""
     status_code = "fail"
@@ -163,13 +177,19 @@ async def book_tickets(request: Request):
                 target_event = event
                 break
 
+    print(f"  Target event found by code: {target_event['name'] if target_event else 'None'}")
+
     if not target_event:
         response_text = "Không tìm thấy sự kiện để đặt vé. Vui lòng xác minh lại thông tin sự kiện."
     elif not target_event['available']:
         response_text = f"Sự kiện '{target_event['name']}' đã hết vé. Không thể đặt được."
     elif not member_id or member_id not in VALID_MEMBER_CODES:
+        print(f"  Validation failed: Member ID '{member_id}' not valid.")
         response_text = f"Mã thành viên {member_id if member_id else 'không có'} không hợp lệ hoặc chưa được xác minh. Vui lòng cung cấp mã thành viên hợp lệ."
-    elif not ticket_type or not ticket_quantity or len(ticket_type) != len(ticket_quantity):  # Đã sửa
+    elif not ticket_type or not ticket_quantity or len(ticket_type) != len(ticket_quantity):
+        print(f"  Validation failed: Ticket types/quantities mismatch or missing.")
+        print(
+            f"  Ticket Type Length: {len(ticket_type) if ticket_type else 0}, Ticket Quantity Length: {len(ticket_quantity) if ticket_quantity else 0}")
         response_text = "Thông tin loại vé hoặc số lượng không hợp lệ. Vui lòng cung cấp loại vé và số lượng bạn muốn đặt."
     else:
         all_bookings_successful = True
@@ -178,6 +198,8 @@ async def book_tickets(request: Request):
         for i in range(len(ticket_type)):
             current_ticket_type = ticket_type[i]
             current_ticket_quantity = int(ticket_quantity[i])
+
+            print(f"  Processing item {i + 1}: Type='{current_ticket_type}', Quantity='{current_ticket_quantity}'")
 
             if current_ticket_type not in target_event.get('ticket_types', []):
                 booking_summary_messages.append(
