@@ -12,9 +12,9 @@ VALID_MEMBER_CODES = ["12345", "54321"]
 FAKE_EVENTS = [
     {"name": "Concert Rap Việt", "date": "2025-08-15", "month": "8", "event_code": "CRV001", "available": True,
      "ticket_types": ["VIP", "Standard"]},
-    {"name": "Những thành phố mơ màng", "date": "2025-09-20", "month": "9", "event_code": "HCS002", "available": True,
+    {"name": "Hội Chợ Sách ABC", "date": "2025-09-20", "month": "9", "event_code": "HCS002", "available": True,
      "ticket_types": ["General", "Premium"]},
-    {"name": "Workshop Giáo viên", "date": "2025-10-01", "month": "10", "event_code": "WNA003", "available": False,
+    {"name": "Workshop Nghệ Thuật", "date": "2025-10-01", "month": "10", "event_code": "WNA003", "available": False,
      "ticket_types": []}
 ]
 
@@ -83,21 +83,31 @@ async def validate_event_and_get_ticket_types(request: Request):
     event_code = None
 
     found_event = None
-    for event in FAKE_EVENTS:
-        if event_name and event_name.lower() == event['name'].lower():
-            if event_date_str:
-                try:
-                    dialogflow_date_obj = datetime.strptime(event_date_str, '%Y-%m-%dT%H:%M:%S%z')
-                    event_date_formatted = dialogflow_date_obj.strftime('%Y-%m-%d')
 
-                    if event_date_formatted == event['date']:
-                        found_event = event
-                        break
-                except ValueError:
-                    pass
+    parsed_event_date = None
+    if event_date_str:
+        try:
+            dialogflow_date_obj = datetime.strptime(event_date_str, '%Y-%m-%dT%H:%M:%S%z')
+            parsed_event_date = dialogflow_date_obj.strftime('%Y-%m-%d')
+        except ValueError:
+            print(f"  Warning: Could not parse event_date_str: {event_date_str}")
+            pass
+
+    for event in FAKE_EVENTS:
+        name_matches = (event_name and event_name.lower() == event['name'].lower())
+
+        print(
+            f"  Comparing input name='{event_name.lower()}' with FAKE_EVENT_name='{event['name'].lower()}' (Match: {name_matches})")
+
+        if name_matches:
+            if parsed_event_date:
+                print(f"  Comparing input date='{parsed_event_date}' with FAKE_EVENT_date='{event['date']}'")
+                if parsed_event_date == event['date']:
+                    found_event = event
+                    break
             else:
-                found_event = event
-                break
+
+                pass
 
     if found_event:
         if found_event['available']:
@@ -129,10 +139,10 @@ async def book_tickets(request: Request):
     request_data = await request.json()
     parameters = request_data.get('sessionInfo', {}).get('parameters', {})
 
-    member_id = str(parameters.get('member_code', '')).lower()  # Use member_code as parameter name from CX
-    event_name = parameters.get('event_name')  # Event name from CX session
-    event_code = parameters.get('event_code')  # Event code from CX session, set by validate_event
-    event_date_str = parameters.get('event_date')  # Event date from CX session
+    member_id = str(parameters.get('member_code', '')).lower()
+    event_name = parameters.get('event_name_from_backend')
+    event_code = parameters.get('event_code')
+    event_date_str = parameters.get('event_date_from_backend')
     ticket_type = parameters.get('ticket_type')
     ticket_quantity = parameters.get('ticket_quantity')
 
@@ -141,13 +151,11 @@ async def book_tickets(request: Request):
 
     target_event = None
     for event in FAKE_EVENTS:
-        # Match by event_code for more precision, or event_name+date
         if event_code and event['event_code'] == event_code:
             target_event = event
             break
-        elif event_name and event_name.lower() in event['name'].lower() and event_date_str and \
-                datetime.strptime(event_date_str, '%Y-%m-%dT%H:%M:%S%z').strftime(
-                    '%Y-%m-%d') == f"2025-{str(event['month']).zfill(2)}-{str(event['date']).split('-')[2].zfill(2)}":
+        elif event_name and event_name.lower() == event['name'].lower() and \
+                event_date_str and event_date_str == event['date']:
             target_event = event
             break
 
@@ -167,7 +175,7 @@ async def book_tickets(request: Request):
             "member_code": member_id,
             "event_name": target_event['name'],
             "event_code": target_event['event_code'],
-            "event_date": target_event['date'],  # Store actual event date
+            "event_date": target_event['date'],
             "ticket_type": ticket_type,
             "ticket_quantity": int(ticket_quantity),
             "booking_date": datetime.now().isoformat(),
