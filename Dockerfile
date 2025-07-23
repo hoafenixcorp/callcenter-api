@@ -11,9 +11,8 @@ RUN pip install -r requirements.txt
 # Sao chép code ứng dụng
 COPY . .
 
-# Khai báo cổng mà ứng dụng sẽ lắng nghe (Cloud Run sẽ cung cấp biến môi trường PORT)
+# Khai báo cổng mà ứng dụng sẽ lắng nghe
 ENV PORT 8080
 
-# Chạy ứng dụng Flask
-# Gunicorn là một WSGI server được khuyến nghị cho production
-CMD exec gunicorn --bind :$PORT --workers 1 --threads 8 --timeout 0 main:app
+# Chạy ứng dụng FastAPI với uvicorn
+CMD exec uvicorn main:app --host 0.0.0.0 --port $PORT
