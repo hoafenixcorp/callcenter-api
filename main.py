@@ -25,15 +25,17 @@ fake_bookings = []
 
 
 def build_cx_webhook_response(text_response: str, business_status: str = "success", custom_params: dict = None):
+    fulfillment_messages = []
+    if text_response is not None:
+        fulfillment_messages.append({
+            "text": {
+                "text": [text_response]
+            }
+        })
+
     response_payload = {
         "fulfillmentResponse": {
-            "messages": [
-                {
-                    "text": {
-                        "text": [text_response]
-                    }
-                }
-            ]
+            "messages": fulfillment_messages
         }
     }
 
@@ -55,15 +57,17 @@ async def verify_member_code(request: Request):
 
     member_id = str(parameters.get('member_id', '')).lower()
 
-    response_text = ""
     status_code = "fail"
+    response_text = None
 
     custom_params = {}
 
     if member_id in VALID_MEMBER_CODES:
-        response_text = f"Xác thực mã thành viên {member_id} thành công. Vui lòng lựa chọn: 1. Đặt vé, hoặc 2. Yêu cầu khác."
         status_code = "success"
-        custom_params["verified_member_code"] = member_id
+        custom_params["club_id"] = "CLUB001"
+        custom_params["member_code"] = member_id
+        custom_params["name"] = "Nguyễn Văn A"
+        response_text = f"Xác thực mã thành viên {member_id} thành công. Chào mừng {custom_params['name']}. Vui lòng lựa chọn: 1. Đặt vé, hoặc 2. Yêu cầu khác."
     else:
         response_text = f"Mã thành viên {member_id} không hợp lệ. Vui lòng kiểm tra lại."
         status_code = "fail"
@@ -100,24 +104,47 @@ async def validate_event_and_get_ticket_types(request: Request):
     best_match_score = 0
     NAME_MATCH_THRESHOLD = 75
 
-    for event in FAKE_EVENTS:
+    candidate_events_by_date = []
+    if event_date_str_from_cx:
+        try:
+            datetime.strptime(event_date_str_from_cx, '%Y-%m-%d')
+            parsed_event_date_for_filter = event_date_str_from_cx
+        except ValueError:
+            try:
+                dialogflow_date_obj = datetime.strptime(event_date_str_from_cx, '%Y-%m-%dT%H:%M:%S%z')
+                parsed_event_date_for_filter = dialogflow_date_obj.strftime('%Y-%m-%d')
+            except ValueError:
+                parsed_event_date_for_filter = None
+
+        if parsed_event_date_for_filter:
+            for event in FAKE_EVENTS:
+                if event['date'] == parsed_event_date_for_filter:
+                    candidate_events_by_date.append(event)
+
+        if not candidate_events_by_date and parsed_event_date_for_filter:
+            response_text = f"Không tìm thấy sự kiện nào vào ngày {parsed_event_date_for_filter}. Vui lòng kiểm tra lại ngày."
+            status_code = "fail"
+            return build_cx_webhook_response(response_text, business_status=status_code)
+    else:
+        candidate_events_by_date = FAKE_EVENTS
+
+    for event in candidate_events_by_date:
         current_score = fuzz.ratio(event_name_from_cx.lower(), event['name'].lower())
 
-        print(
-            f"  Comparing input name='{event_name_from_cx.lower()}' with FAKE_EVENT_name='{event['name'].lower()}' (Score: {current_score})")
-
         if current_score >= NAME_MATCH_THRESHOLD:
-            if event_date_str_from_cx:
-                print(f"  Comparing input date='{event_date_str_from_cx}' with FAKE_EVENT_date='{event['date']}'")
-                if event_date_str_from_cx == event['date']:
+            if event_date_str_from_cx and parsed_event_date_for_filter:
+                if parsed_event_date_for_filter == event['date']:
                     if current_score > best_match_score:
                         best_match_event = event
                         best_match_score = current_score
-            else:
-                pass
+            elif not event_date_str_from_cx:
+                if current_score > best_match_score:
+                    best_match_event = event
+                    best_match_score = current_score
 
     found_event = best_match_event
 
+    custom_params = {}
     if found_event:
         if found_event['available']:
             is_valid_event = True
@@ -125,6 +152,7 @@ async def validate_event_and_get_ticket_types(request: Request):
             event_code = found_event['event_code']
             response_text = f"Sự kiện '{found_event['name']}' vào ngày {found_event['date']} còn vé. Các loại vé có sẵn: {', '.join(available_ticket_types)}. Vui lòng chọn loại vé và số lượng bạn muốn đặt."
             status_code = "success"
+            custom_params["event_id"] = found_event['event_code']
         else:
             response_text = f"Sự kiện '{found_event['name']}' vào ngày {found_event['date']} đã hết vé. Xin lỗi quý khách."
             status_code = "fail"
@@ -132,13 +160,13 @@ async def validate_event_and_get_ticket_types(request: Request):
         response_text = "Không tìm thấy thông tin sự kiện bạn yêu cầu. Vui lòng kiểm tra lại tên sự kiện hoặc ngày tháng."
         status_code = "fail"
 
-    custom_params = {
+    custom_params.update({
         "is_event_valid": is_valid_event,
         "available_ticket_types": available_ticket_types,
         "event_code": event_code,
         "event_name_from_backend": found_event['name'] if found_event else None,
         "event_date_from_backend": found_event['date'] if found_event else None
-    }
+    })
 
     return build_cx_webhook_response(response_text, business_status=status_code, custom_params=custom_params)
 
@@ -246,6 +274,8 @@ async def book_tickets(request: Request):
 async def add_booking_note(request: Request):
     request_data = await request.json()
     parameters = request_data.get('sessionInfo', {}).get('parameters', {})
+    # session_id = request_data.get('session', '').split('/')[-1]
+    # dialogflow_intent = request_data.get('intentInfo', {}).get('lastMatchedIntent', '').split('/')[-1]
 
     member_id = str(parameters.get('member_code', '')).lower()
     event_code = parameters.get('event_code')
@@ -269,7 +299,7 @@ async def add_booking_note(request: Request):
     else:
         response_text = "Thông tin không đủ để thêm ghi chú. Vui lòng cung cấp mã thành viên, mã sự kiện và nội dung ghi chú."
 
-    return build_cx_webhook_response(response_text, business_status=status_code)
+    return build_cx_webhook_response(response_text, business_status=status_code, custom_params={})
 
 
 @app.get("/status")
