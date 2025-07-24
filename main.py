@@ -179,7 +179,7 @@ async def book_tickets(request: Request):
     print(f"Received request for /book_tickets:")
     print(f"  All parameters received: {parameters}")
 
-    member_id = str(parameters.get('verified_member_code', '')).lower()
+    member_id = str(parameters.get('member_code', '')).lower()
     event_code = parameters.get('event_code')
 
     ticket_type_raw = parameters.get('ticket_type')
