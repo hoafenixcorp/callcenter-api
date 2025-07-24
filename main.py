@@ -50,6 +50,50 @@ def build_cx_webhook_response(text_response: str, business_status: str = "succes
     return JSONResponse(content=response_payload)
 
 
+def parse_ticket_input(raw_input, target_type):
+    """
+    Xử lý đầu vào raw (có thể là string 'item1, item2' hoặc list ['item1', 'item2'])
+    và chuyển đổi thành list các phần tử của target_type.
+    """
+    if raw_input is None:
+        return []
+
+    parsed_list = []
+    if isinstance(raw_input, list):
+        for item in raw_input:
+            try:
+                parsed_list.append(target_type(str(item).strip()))
+            except ValueError:
+                print(f"Warning: Could not convert list item '{item}' to {target_type.__name__}.")
+                if target_type == int:
+                    parsed_list.append(0)
+                else:
+                    pass
+    elif isinstance(raw_input, str):
+        items = raw_input.split(',')
+        for item_str in items:
+            stripped_item = item_str.strip()
+            if stripped_item:
+                try:
+                    parsed_list.append(target_type(stripped_item))
+                except ValueError:
+                    print(f"Warning: Could not convert string part '{stripped_item}' to {target_type.__name__}.")
+                    if target_type == int:
+                        parsed_list.append(0)
+                    else:
+                        pass
+    else:
+        try:
+            parsed_list.append(target_type(str(raw_input).strip()))
+        except ValueError:
+            print(f"Warning: Could not convert unexpected type '{raw_input}' to {target_type.__name__}.")
+            if target_type == int:
+                parsed_list.append(0)
+            else:
+                pass
+
+    return parsed_list
+
 @app.post("/verify_member_code")
 async def verify_member_code(request: Request):
     request_data = await request.json()
@@ -185,10 +229,8 @@ async def book_tickets(request: Request):
     ticket_type_raw = parameters.get('ticket_type')
     ticket_quantity_raw = parameters.get('ticket_quantity')
 
-    ticket_type = [ticket_type_raw] if ticket_type_raw is not None and not isinstance(ticket_type_raw,
-                                                                                      list) else ticket_type_raw if ticket_type_raw is not None else []
-    ticket_quantity = [ticket_quantity_raw] if ticket_quantity_raw is not None and not isinstance(ticket_quantity_raw,
-                                                                                                  list) else ticket_quantity_raw if ticket_quantity_raw is not None else []
+    ticket_type = parse_ticket_input(ticket_type_raw, str)
+    ticket_quantity = parse_ticket_input(ticket_quantity_raw, int)
 
     print(f"  Extracted member_id: '{member_id}'")
     print(f"  Extracted event_code: '{event_code}'")
