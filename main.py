@@ -344,6 +344,19 @@ async def add_booking_note(request: Request):
     return build_cx_webhook_response(response_text, business_status=status_code, custom_params={})
 
 
+@app.post("/faqs")
+async def faq(request: Request):
+    request_data = await request.json()
+    parameters = request_data.get('sessionInfo', {}).get('parameters', {})
+
+    question = parameters.get('question', "")
+    print(f"User question: {question}")
+
+    response_text = "Không tìm thấy câu trả lời. Vui lòng chờ máy, cuộc gọi sẽ được chuyển sang nhân viên hỗ trợ."
+
+    return build_cx_webhook_response(response_text, business_status="fail", custom_params={})
+
+
 @app.get("/status")
 async def get_status():
     return {"status": "ok", "message": "Backend API is running", "current_bookings": fake_bookings}
