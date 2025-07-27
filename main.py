@@ -329,20 +329,26 @@ async def add_booking_note(request: Request):
     response_text = ""
     status_code = "fail"
     booking_found = False
+
+    print(f"Received request for /add_booking_note:")
+    print(f"  Member ID: '{member_id}', Booking ID: '{booking_id}', Note: '{note}'")
+
     if member_id and booking_id and note:
         for booking in fake_bookings:
-            if booking['member_code'] == member_id and booking['booking_id'] == booking_id:
+            print(f"  Checking booking: member_code='{booking.get('member_code')}', booking_id='{booking.get('overall_booking_id')}'")
+            if booking.get('member_code') == member_id and booking.get('overall_booking_id') == booking_id: # Updated to overall_booking_id
                 booking['note'] = note
                 booking_found = True
+                print(f"  Booking found and note added for booking_id: {booking_id}")
                 break
 
         if booking_found:
             response_text = "Yêu cầu đặc biệt của quý khách đã được ghi nhận. Hệ thống sẽ cố gắng đáp ứng."
             status_code = "success"
         else:
-            response_text = "Không tìm thấy đặt vé phù hợp để thêm yêu cầu, hoặc thông tin chưa đủ. Vui lòng kiểm tra lại mã thành viên và mã sự kiện."
+            response_text = "Không tìm thấy đặt vé phù hợp để thêm yêu cầu, hoặc thông tin chưa đủ. Vui lòng kiểm tra lại mã thành viên và mã đặt chỗ."
     else:
-        response_text = "Thông tin không đủ để thêm ghi chú. Vui lòng cung cấp mã thành viên, mã sự kiện và nội dung ghi chú."
+        response_text = "Thông tin không đủ để thêm ghi chú. Vui lòng cung cấp mã thành viên, mã đặt chỗ và nội dung ghi chú."
 
     return build_cx_webhook_response(response_text, business_status=status_code, custom_params={})
 
