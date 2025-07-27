@@ -270,6 +270,8 @@ async def book_tickets(request: Request):
         due_date = current_booking_time + timedelta(days=5)
         due_date_formatted = due_date.strftime('%d/%m/%Y')
 
+        overall_booking_id = str(uuid.uuid4())[:8]
+
         for i in range(len(ticket_type)):
             current_ticket_type = ticket_type[i]
             current_ticket_quantity = int(ticket_quantity[i])
@@ -286,6 +288,7 @@ async def book_tickets(request: Request):
             else:
                 booking_details = {
                     "booking_id": str(uuid.uuid4())[:8],
+                    "overall_booking_id": overall_booking_id,
                     "member_code": member_id,
                     "event_name": target_event['name'],
                     "event_code": target_event['event_code'],
@@ -299,36 +302,36 @@ async def book_tickets(request: Request):
                 booking_summary_messages.append(f"{current_ticket_quantity} vé loại {current_ticket_type}")
                 total_ticket_quantity_sum += current_ticket_quantity
 
+        custom_params = {}
         if all_bookings_successful:
             status_code = "success"
             response_text = (
                 f"Hệ thống đã thành công đặt {', '.join(booking_summary_messages)} cho sự kiện '{target_event['name']}' "
                 f"vào ngày {target_event['date']} cho hội viên {member_id}. Tổng cộng {total_ticket_quantity_sum} vé. "
                 f"Vui lòng chuyển khoản trước ngày {due_date_formatted}. Sau cuộc gọi này hệ thống sẽ gửi SMS thông tin thanh toán.")
+            custom_params["booking_id"] = overall_booking_id
         else:
             status_code = "fail"
             response_text = f"Có lỗi trong quá trình đặt vé: {'; '.join(booking_summary_messages)}. Vui lòng kiểm tra lại."
 
-    return build_cx_webhook_response(response_text, business_status=status_code)
+    return build_cx_webhook_response(response_text, business_status=status_code, custom_params=custom_params)
 
 
 @app.post("/add_booking_note")
 async def add_booking_note(request: Request):
     request_data = await request.json()
     parameters = request_data.get('sessionInfo', {}).get('parameters', {})
-    # session_id = request_data.get('session', '').split('/')[-1]
-    # dialogflow_intent = request_data.get('intentInfo', {}).get('lastMatchedIntent', '').split('/')[-1]
 
     member_id = str(parameters.get('member_code', '')).lower()
-    event_code = parameters.get('event_code')
+    booking_id = parameters.get('booking_id')
     note = parameters.get('note')
 
     response_text = ""
     status_code = "fail"
     booking_found = False
-    if member_id and event_code and note:
+    if member_id and booking_id and note:
         for booking in fake_bookings:
-            if booking['member_code'] == member_id and booking['event_code'] == event_code:
+            if booking['member_code'] == member_id and booking['booking_id'] == booking_id:
                 booking['note'] = note
                 booking_found = True
                 break
